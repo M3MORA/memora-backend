@@ -54,7 +54,7 @@ concurrency:
 jobs:
   bootstrap:
     name: One-time bootstrap
-    runs-on: [self-hosted, memora-cd]
+    runs-on: [self-hosted, Linux, X64]
     timeout-minutes: 60
     steps:
       - name: Refuse GitHub-hosted execution

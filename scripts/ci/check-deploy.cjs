@@ -72,8 +72,8 @@ for (const [name, body] of [
     process.stderr.write(`FAIL ${name} must not run on pull_request\n`);
     process.exit(1);
   }
-  if (!body.includes('memora-cd')) {
-    process.stderr.write(`FAIL ${name} must pin memora-cd runner\n`);
+  if (!body.includes('self-hosted') || !body.includes('Linux')) {
+    process.stderr.write(`FAIL ${name} must pin the Mini PC self-hosted runner\n`);
     process.exit(1);
   }
   if (body.includes('npm ci') || body.includes('nest build')) {

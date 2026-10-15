@@ -128,6 +128,18 @@ wait_healthy() {
   die "${name} did not become healthy"
 }
 
+image_digest_after_pull() {
+  local ref="$1"
+  local label="$2"
+  [[ "$ref" == ghcr.io/m3mora/memora-* ]] || die "ref ${label} is not a MEMORA GHCR image"
+  docker pull "${ref}"
+  local raw
+  raw="$(docker image inspect --format '{{index .RepoDigests 0}}' "${ref}")"
+  local digest="${raw##*@}"
+  validate_digest "${digest}" "${label}"
+  printf '%s\n' "${digest}"
+}
+
 ghcr_login() {
   [[ -f "${MEMORA_SECRETS_DIR}/ghcr.env" ]] || die "missing ${MEMORA_SECRETS_DIR}/ghcr.env"
   # shellcheck disable=SC1091

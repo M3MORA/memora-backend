@@ -35,7 +35,7 @@ concurrency:
 jobs:
   deploy:
     name: Deploy backend
-    runs-on: [self-hosted, memora-cd]
+    runs-on: [self-hosted, Linux, X64]
     timeout-minutes: 45
     steps:
       - name: Refuse GitHub-hosted execution

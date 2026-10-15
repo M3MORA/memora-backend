@@ -56,6 +56,7 @@ parse_opts() {
   RUN_MIGRATE=0
   RUN_SEED=0
   RUN_RBAC=0
+  FROM_SHA_TAGS=0
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --release-sha|--gateway-digest|--iam-digest|--migrate-digest|--confirm|--confirm-bootstrap|--confirm-migrate|--confirm-rbac)
@@ -73,6 +74,7 @@ parse_opts() {
         esac
         shift 2
         ;;
+      --from-sha-tags) FROM_SHA_TAGS=1; shift ;;
       --run-migrate) RUN_MIGRATE=1; shift ;;
       --run-seed) RUN_SEED=1; shift ;;
       --run-rbac) RUN_RBAC=1; shift ;;
@@ -291,13 +293,25 @@ cmd_bootstrap() {
   log "bootstrap complete"
 }
 
+resolve_digests_from_sha_tags() {
+  validate_sha "${RELEASE_SHA}"
+  ghcr_login
+  GATEWAY_DIGEST="$(image_digest_after_pull "ghcr.io/m3mora/memora-api-gateway:${RELEASE_SHA}" gateway)"
+  IAM_DIGEST="$(image_digest_after_pull "ghcr.io/m3mora/memora-iam-service:${RELEASE_SHA}" iam)"
+  MIGRATE_DIGEST="$(image_digest_after_pull "ghcr.io/m3mora/memora-iam-migrate:${RELEASE_SHA}" migrate)"
+}
+
 cmd_deploy() {
   parse_opts "$@"
   validate_sha "${RELEASE_SHA}"
-  validate_digest "${GATEWAY_DIGEST}" gateway
-  validate_digest "${IAM_DIGEST}" iam
-  validate_digest "${MIGRATE_DIGEST}" migrate
-  [[ -f "${MEMORA_STATE_DIR}/bootstrap-complete" ]] || die "bootstrap not complete"
+  if [[ "${FROM_SHA_TAGS}" -eq 1 ]]; then
+    resolve_digests_from_sha_tags
+  else
+    validate_digest "${GATEWAY_DIGEST}" gateway
+    validate_digest "${IAM_DIGEST}" iam
+    validate_digest "${MIGRATE_DIGEST}" migrate
+  fi
+  [[ -f "${MEMORA_STATE_DIR}/bootstrap-complete" ]] || die "bootstrap not complete; run Bootstrap Mini PC once"
   cmd_preflight
   cmd_backup
   write_release_env "${RELEASE_SHA}" "${GATEWAY_DIGEST}" "${IAM_DIGEST}" "${MIGRATE_DIGEST}"

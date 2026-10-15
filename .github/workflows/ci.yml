@@ -306,3 +306,27 @@ jobs:
         run: |
           echo "digest=${{ steps.push.outputs.digest }}" >> "$GITHUB_STEP_SUMMARY"
           echo "pushed ${IMAGE}:${TAG} digest=${{ steps.push.outputs.digest }} commit=${GITHUB_SHA}"
+
+  deploy:
+    name: Deploy Mini PC
+    needs: [quality, security, publish]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - name: Refuse GitHub-hosted execution
+        run: |
+          if [[ "${RUNNER_NAME:-}" == "GitHub Actions"* ]] || [[ "${RUNNER_ENVIRONMENT:-}" == "github-hosted" ]]; then
+            echo "Mini PC deploy must use the self-hosted runner" >&2
+            exit 1
+          fi
+
+      - name: Deploy published SHA
+        run: |
+          set -euo pipefail
+          sudo -n /opt/memora/bin/memora-deploy deploy \
+            --release-sha "${GITHUB_SHA}" \
+            --from-sha-tags \
+            --confirm-migrate MIGRATE

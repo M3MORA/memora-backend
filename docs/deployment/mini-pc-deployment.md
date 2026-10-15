@@ -2,9 +2,23 @@
 
 Daily (or as-needed) **application** update after bootstrap. Does not restart Postgres/Redis, does not recreate `memora-network`, does not apply RBAC.
 
-## Workflow
+## Automatic deploy (push / merge to `main`)
 
-`.github/workflows/deploy.yml` — `workflow_dispatch` only, `[self-hosted, memora-cd]`.
+After **Quality gates**, **Security**, and **Publish GHCR** all succeed, job **Deploy Mini PC** runs on runner `optiplex-server` (`self-hosted`, `Linux`, `X64`).
+
+It does **not** build source. It calls:
+
+`sudo -n /opt/memora/bin/memora-deploy deploy --release-sha $GITHUB_SHA --from-sha-tags --confirm-migrate MIGRATE`
+
+Pull Request **không** deploy. Bootstrap infra **không** tự chạy.
+
+Runner GitHub đang Idle **chưa** đủ: host phải có helper + secrets + **một lần** Bootstrap (xem `infrastructure-bootstrap.md`). Nếu chưa bootstrap, job CD fail với `bootstrap not complete`.
+
+Sudoers phải khớp **user OS** của process runner (không nhất thiết tên `runner-memora-backend`).
+
+## Manual deploy
+
+`.github/workflows/deploy.yml` — `workflow_dispatch`, cùng runner `[self-hosted, Linux, X64]`.
 
 `sudo -n /opt/memora/bin/memora-deploy deploy --release-sha … --gateway-digest … --iam-digest … --migrate-digest …`
 

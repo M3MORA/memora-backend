@@ -4,4 +4,6 @@
 # The helper validates subcommands and image digests internally.
 
 Defaults:runner-memora-backend env_reset
-runner-memora-backend ALL=(root) NOPASSWD: /opt/memora/bin/memora-deploy
+# Replace RUNNER_OS_USER with the account that runs GitHub Actions
+# (ps aux | grep Runner.Listener). Example: github-runner or runner-memora-backend.
+RUNNER_OS_USER ALL=(root) NOPASSWD: /opt/memora/bin/memora-deploy
