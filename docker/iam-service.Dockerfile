@@ -1,6 +1,7 @@
 # syntax=docker/dockerfile:1
 
-FROM node:20-bookworm-slim AS deps
+ARG NODE_IMAGE=node:20.20.2-bookworm-slim
+FROM ${NODE_IMAGE} AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
@@ -15,10 +16,11 @@ ENV IAM_DATABASE_URL=postgresql://prisma_generate:unused@127.0.0.1:5432/prisma_g
 RUN npm run prisma:iam:generate \
   && npx nest build iam-service
 
-FROM node:20-bookworm-slim AS production
+FROM ${NODE_IMAGE} AS production
 WORKDIR /app
 ENV NODE_ENV=production
 RUN apt-get update \
+  && apt-get upgrade -y --no-install-recommends \
   && apt-get install -y --no-install-recommends ca-certificates openssl \
   && rm -rf /var/lib/apt/lists/* \
   && groupadd --system --gid 1001 memora \

@@ -1,6 +1,7 @@
 # syntax=docker/dockerfile:1
 
-FROM node:20-bookworm-slim AS deps
+ARG NODE_IMAGE=node:20.20.2-bookworm-slim
+FROM ${NODE_IMAGE} AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
@@ -12,10 +13,11 @@ COPY libs ./libs
 COPY proto ./proto
 RUN npx nest build api-gateway
 
-FROM node:20-bookworm-slim AS production
+FROM ${NODE_IMAGE} AS production
 WORKDIR /app
 ENV NODE_ENV=production
 RUN apt-get update \
+  && apt-get upgrade -y --no-install-recommends \
   && apt-get install -y --no-install-recommends ca-certificates \
   && rm -rf /var/lib/apt/lists/* \
   && groupadd --system --gid 1001 memora \

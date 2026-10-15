@@ -1,9 +1,11 @@
 # syntax=docker/dockerfile:1
 # One-shot Prisma migrate / seed / RBAC runner. Not an application service.
 
-FROM node:20-bookworm-slim
+ARG NODE_IMAGE=node:20.20.2-bookworm-slim
+FROM ${NODE_IMAGE}
 WORKDIR /app
 RUN apt-get update \
+  && apt-get upgrade -y --no-install-recommends \
   && apt-get install -y --no-install-recommends openssl ca-certificates \
   && rm -rf /var/lib/apt/lists/* \
   && groupadd --system --gid 1001 memora \

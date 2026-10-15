@@ -23,7 +23,7 @@ Phase 3.13A publishes **application images only**. There is **no Mini PC deploy 
 
 Multi-stage:
 
-1. `npm ci` from `package-lock.json` (Node 20, same as CI).
+1. `npm ci` from `package-lock.json` (Node `20.20.2-bookworm-slim`, same major as CI). Runtime stages `apt-get upgrade` Debian security patches before scan.
 2. Build: `npx nest build api-gateway` or `prisma:iam:generate` + `npx nest build iam-service`.
 3. Runtime: `npm ci --omit=dev`, copy `dist/`, `proto/`, and (IAM) `apps/iam-service/generated/prisma`. Non-root user `memora` (uid 1001).
 
