@@ -34,6 +34,7 @@
     "proto:check": "node scripts/ci/check-protos.cjs",
     "ci:audit": "node scripts/ci/npm-audit-gate.cjs",
     "ci:secrets": "node scripts/ci/deny-tracked-secrets.cjs",
+    "ci:deploy-layout": "node scripts/ci/check-deploy.cjs",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",

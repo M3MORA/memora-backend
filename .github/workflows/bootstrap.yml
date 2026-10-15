@@ -1,0 +1,98 @@
+name: Bootstrap Mini PC
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_sha:
+        description: 40-char Git SHA whose GHCR images will be deployed
+        required: true
+        type: string
+      gateway_digest:
+        description: sha256:… digest for ghcr.io/m3mora/memora-api-gateway
+        required: true
+        type: string
+      iam_digest:
+        description: sha256:… digest for ghcr.io/m3mora/memora-iam-service
+        required: true
+        type: string
+      migrate_digest:
+        description: sha256:… digest for ghcr.io/m3mora/memora-iam-migrate
+        required: true
+        type: string
+      confirm_bootstrap:
+        description: Type BOOTSTRAP to confirm one-time infrastructure bootstrap
+        required: true
+        type: string
+      confirm_migrate:
+        description: Type MIGRATE to run prisma migrate deploy (empty skips)
+        required: false
+        type: string
+        default: ''
+      run_seed:
+        description: Run initial IAM seed
+        required: true
+        type: boolean
+        default: false
+      run_rbac:
+        description: Apply approved RBAC v1 grants (requires confirm_rbac marker)
+        required: true
+        type: boolean
+        default: false
+      confirm_rbac:
+        description: MEMORA_RBAC_V1_2026_10_15 to apply RBAC
+        required: false
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  group: memora-cd-bootstrap
+  cancel-in-progress: false
+
+jobs:
+  bootstrap:
+    name: One-time bootstrap
+    runs-on: [self-hosted, memora-cd]
+    timeout-minutes: 60
+    steps:
+      - name: Refuse GitHub-hosted execution
+        run: |
+          echo "runner=${RUNNER_NAME:-unknown}"
+          if [[ "${RUNNER_NAME:-}" == "GitHub Actions"* ]] || [[ "${RUNNER_ENVIRONMENT:-}" == "github-hosted" ]]; then
+            echo "bootstrap must use self-hosted memora-cd" >&2
+            exit 1
+          fi
+
+      - name: Invoke root-owned helper
+        env:
+          RELEASE_SHA: ${{ inputs.release_sha }}
+          GATEWAY_DIGEST: ${{ inputs.gateway_digest }}
+          IAM_DIGEST: ${{ inputs.iam_digest }}
+          MIGRATE_DIGEST: ${{ inputs.migrate_digest }}
+          CONFIRM_BOOTSTRAP: ${{ inputs.confirm_bootstrap }}
+          CONFIRM_MIGRATE: ${{ inputs.confirm_migrate }}
+          RUN_SEED: ${{ inputs.run_seed }}
+          RUN_RBAC: ${{ inputs.run_rbac }}
+          CONFIRM_RBAC: ${{ inputs.confirm_rbac }}
+        run: |
+          set -euo pipefail
+          ARGS=(
+            bootstrap
+            --release-sha "${RELEASE_SHA}"
+            --gateway-digest "${GATEWAY_DIGEST}"
+            --iam-digest "${IAM_DIGEST}"
+            --migrate-digest "${MIGRATE_DIGEST}"
+            --confirm-bootstrap "${CONFIRM_BOOTSTRAP}"
+          )
+          if [[ "${CONFIRM_MIGRATE}" == "MIGRATE" ]]; then
+            ARGS+=(--confirm-migrate MIGRATE)
+          fi
+          if [[ "${RUN_SEED}" == "true" ]]; then
+            ARGS+=(--run-seed)
+          fi
+          if [[ "${RUN_RBAC}" == "true" ]]; then
+            ARGS+=(--run-rbac --confirm-rbac "${CONFIRM_RBAC}")
+          fi
+          sudo -n /opt/memora/bin/memora-deploy "${ARGS[@]}"

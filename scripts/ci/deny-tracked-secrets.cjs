@@ -21,7 +21,7 @@ const forbidden = listed.stdout
   .split(/\r?\n/)
   .filter(Boolean)
   .filter((file) => {
-    if (file === '.env.example') {
+    if (file === '.env.example' || file.endsWith('/.env.example')) {
       return false;
     }
     if (/(^|\/)\.env($|\.)/.test(file)) {

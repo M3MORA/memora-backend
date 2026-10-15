@@ -1,6 +1,6 @@
 # MEMORA CI pipeline
 
-GitHub Actions workflow: `.github/workflows/ci.yml`. This is **continuous integration only** (no deploy, no K3s, no production migrate/seed).
+GitHub Actions workflow: `.github/workflows/ci.yml`. CI plus **GHCR image publish** on trusted `main` (no Mini PC deploy, no K3s, no production migrate/seed). See `docs/deployment/container-registry.md`.
 
 ## Triggers
 
@@ -18,6 +18,7 @@ Concurrency cancels superseded runs on the same PR or branch.
 |---|---|
 | **Quality gates** | Kit, boundaries, proto load, Prisma validate/generate/migrate on CI Postgres, ESLint, `tsc`, Nest builds (`api-gateway`, `iam-service`), Jest unit + IAM refresh mocks, then live Redis cache/queue tests |
 | **Security** | No tracked `.env` / key material; production `npm audit` with allowlisted Prisma transitive highs only; **critical always fails** |
+| **Publish GHCR** | After both jobs PASS, **push to `main` only** (not PRs): build `linux/amd64` images, smoke/inspect, Trivy CRITICAL, push `ghcr.io/m3mora/memora-api-gateway:<sha>` and `memora-iam-service:<sha>` |
 
 Required checks to enable after the workflow has run once on GitHub:
 

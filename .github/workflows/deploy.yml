@@ -1,0 +1,67 @@
+name: Deploy backend
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_sha:
+        description: 40-char Git SHA whose GHCR images will be deployed
+        required: true
+        type: string
+      gateway_digest:
+        description: sha256:… digest for ghcr.io/m3mora/memora-api-gateway
+        required: true
+        type: string
+      iam_digest:
+        description: sha256:… digest for ghcr.io/m3mora/memora-iam-service
+        required: true
+        type: string
+      migrate_digest:
+        description: sha256:… digest for ghcr.io/m3mora/memora-iam-migrate
+        required: true
+        type: string
+      confirm_migrate:
+        description: Type MIGRATE to run prisma migrate deploy before app update (empty skips)
+        required: false
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  group: memora-cd-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy backend
+    runs-on: [self-hosted, memora-cd]
+    timeout-minutes: 45
+    steps:
+      - name: Refuse GitHub-hosted execution
+        run: |
+          if [[ "${RUNNER_NAME:-}" == "GitHub Actions"* ]] || [[ "${RUNNER_ENVIRONMENT:-}" == "github-hosted" ]]; then
+            echo "deploy must use self-hosted memora-cd" >&2
+            exit 1
+          fi
+
+      - name: Invoke root-owned helper
+        env:
+          RELEASE_SHA: ${{ inputs.release_sha }}
+          GATEWAY_DIGEST: ${{ inputs.gateway_digest }}
+          IAM_DIGEST: ${{ inputs.iam_digest }}
+          MIGRATE_DIGEST: ${{ inputs.migrate_digest }}
+          CONFIRM_MIGRATE: ${{ inputs.confirm_migrate }}
+        run: |
+          set -euo pipefail
+          ARGS=(
+            deploy
+            --release-sha "${RELEASE_SHA}"
+            --gateway-digest "${GATEWAY_DIGEST}"
+            --iam-digest "${IAM_DIGEST}"
+            --migrate-digest "${MIGRATE_DIGEST}"
+          )
+          if [[ "${CONFIRM_MIGRATE}" == "MIGRATE" ]]; then
+            ARGS+=(--confirm-migrate MIGRATE)
+          fi
+          sudo -n /opt/memora/bin/memora-deploy "${ARGS[@]}"

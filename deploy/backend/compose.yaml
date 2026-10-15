@@ -1,0 +1,102 @@
+name: memora-backend
+
+networks:
+  memora-network:
+    name: memora-network
+    external: true
+
+services:
+  api-gateway:
+    image: ${GATEWAY_IMAGE}
+    container_name: memora-api-gateway
+    restart: unless-stopped
+    stop_grace_period: 30s
+    env_file:
+      - ${MEMORA_SECRETS_DIR:-/opt/memora/secrets}/gateway.env
+    environment:
+      NODE_ENV: production
+      API_GATEWAY_PORT: '3000'
+      IAM_GRPC_URL: iam-service:50051
+    ports:
+      - '127.0.0.1:3000:3000'
+    networks:
+      memora-network:
+        aliases:
+          - api-gateway
+    depends_on:
+      iam-service:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:3000/health/live').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 25s
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '5'
+    labels:
+      com.memora.stack: backend
+      com.memora.managed: 'true'
+      com.memora.release: ${MEMORA_RELEASE_SHA:-unknown}
+
+  iam-service:
+    image: ${IAM_IMAGE}
+    container_name: memora-iam-service
+    restart: unless-stopped
+    stop_grace_period: 30s
+    env_file:
+      - ${MEMORA_SECRETS_DIR:-/opt/memora/secrets}/iam.env
+    environment:
+      NODE_ENV: production
+      IAM_GRPC_HOST: 0.0.0.0
+      IAM_GRPC_PORT: '50051'
+      IAM_HEALTH_HOST: 0.0.0.0
+      IAM_HEALTH_PORT: '5051'
+      IAM_REDIS_HOST: redis
+      IAM_REDIS_PORT: '6379'
+      IAM_REDIS_DB: '0'
+    networks:
+      memora-network:
+        aliases:
+          - iam-service
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:5051/health/live').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '5'
+    labels:
+      com.memora.stack: backend
+      com.memora.managed: 'true'
+      com.memora.release: ${MEMORA_RELEASE_SHA:-unknown}
+    # No host ports: gRPC and IAM health stay on memora-network.

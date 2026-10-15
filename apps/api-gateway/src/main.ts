@@ -67,6 +67,7 @@ async function bootstrap() {
   app.useGlobalPipes(createHttpValidationPipe());
   app.useGlobalFilters(new HttpExceptionFilter());
   setupSwagger(app, configService);
+  app.enableShutdownHooks();
 
   await app.listen(port);
   Logger.log(`API Gateway running on port ${port}`, 'Bootstrap');

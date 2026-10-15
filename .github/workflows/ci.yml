@@ -83,6 +83,7 @@ jobs:
         run: |
           npm run kit:validate
           npm run boundaries
+          npm run ci:deploy-layout
 
       - name: Load gRPC protos
         run: npm run proto:check
@@ -137,3 +138,166 @@ jobs:
 
       - name: Production dependency audit
         run: npm run ci:audit
+
+  publish:
+    name: Publish GHCR (${{ matrix.app }})
+    needs: [quality, security]
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - app: api-gateway
+            image: memora-api-gateway
+            file: docker/api-gateway.Dockerfile
+          - app: iam-service
+            image: memora-iam-service
+            file: docker/iam-service.Dockerfile
+          - app: iam-migrate
+            image: memora-iam-migrate
+            file: docker/iam-migrate.Dockerfile
+    env:
+      IMAGE: ghcr.io/m3mora/${{ matrix.image }}
+      TAG: ${{ github.sha }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image (linux/amd64, no push)
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.file }}
+          platforms: linux/amd64
+          load: true
+          push: false
+          provenance: false
+          sbom: false
+          tags: ${{ env.IMAGE }}:${{ env.TAG }}
+          cache-from: type=gha,scope=${{ matrix.app }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.app }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.title=${{ matrix.image }}
+
+      - name: Record local image identity
+        run: |
+          echo "image=${IMAGE}" >> "$GITHUB_STEP_SUMMARY"
+          echo "tag=${TAG}" >> "$GITHUB_STEP_SUMMARY"
+          echo "commit=${GITHUB_SHA}" >> "$GITHUB_STEP_SUMMARY"
+          docker image inspect "${IMAGE}:${TAG}" --format 'id={{.Id}} size={{.Size}} os={{.Os}} arch={{.Architecture}}' | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Reject secrets inside image
+        run: |
+          docker run --rm --entrypoint sh "${IMAGE}:${TAG}" -c '
+            set -eu
+            if [ -e /app/.env ] || [ -e /.env ]; then
+              echo "FAIL: .env present in image" >&2
+              exit 1
+            fi
+            found="$(find /app -name ".env" -o -name ".env.*" -o -name "credentials.json" -o -name "*.pem" 2>/dev/null | grep -v ".env.example" || true)"
+            if [ -n "$found" ]; then
+              echo "FAIL: secret-like paths:" >&2
+              echo "$found" >&2
+              exit 1
+            fi
+            echo "no .env or credential files in /app"
+          '
+
+      - name: Verify Gateway entrypoint and live probe
+        if: matrix.app == 'api-gateway'
+        run: |
+          docker run --rm --entrypoint sh "${IMAGE}:${TAG}" -c 'test -f /app/dist/apps/api-gateway/main.js && test -f /app/proto/iam/v1/iam.proto'
+          cid="$(docker run -d --name memora-gw-smoke \
+            -e NODE_ENV=production \
+            -e API_GATEWAY_PORT=3000 \
+            -e SWAGGER_ENABLED=false \
+            -e IAM_GRPC_URL=iam-service:50051 \
+            -e IAM_INTERNAL_GRPC_SECRET=0123456789abcdef0123456789abcdef \
+            -p 127.0.0.1:3000:3000 \
+            "${IMAGE}:${TAG}")"
+          cleanup() { docker rm -f "$cid" >/dev/null 2>&1 || true; }
+          trap cleanup EXIT
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:3000/health/live | grep -q '"ok"'; then
+              echo "gateway live ok"
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs "$cid" >&2
+          echo "gateway live probe failed" >&2
+          exit 1
+
+      - name: Verify IAM entrypoint and Prisma client
+        if: matrix.app == 'iam-service'
+        run: |
+          docker run --rm --entrypoint sh "${IMAGE}:${TAG}" -c '
+            set -eu
+            test -f /app/dist/apps/iam-service/main.js
+            test -f /app/proto/iam/v1/iam.proto
+            test -f /app/proto/grpc/health/v1/health.proto
+            test -f /app/apps/iam-service/generated/prisma/client.ts
+            ls /app/apps/iam-service/generated/prisma >/dev/null
+            echo "iam entrypoint and prisma client present"
+          '
+
+      - name: Verify migrate image Prisma CLI
+        if: matrix.app == 'iam-migrate'
+        run: |
+          docker run --rm --entrypoint sh "${IMAGE}:${TAG}" -c '
+            set -eu
+            test -f /app/apps/iam-service/prisma/schema.prisma
+            test -f /app/apps/iam-service/generated/prisma/client.ts
+            npx prisma -v
+            echo "migrate image ok"
+          '
+
+      - name: Scan image (fail on CRITICAL)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ env.IMAGE }}:${{ env.TAG }}
+          format: table
+          severity: CRITICAL
+          exit-code: '1'
+          ignore-unfixed: true
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push image
+        id: push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.file }}
+          platforms: linux/amd64
+          push: true
+          load: false
+          provenance: false
+          sbom: false
+          tags: ${{ env.IMAGE }}:${{ env.TAG }}
+          cache-from: type=gha,scope=${{ matrix.app }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.title=${{ matrix.image }}
+
+      - name: Publish digest
+        run: |
+          echo "digest=${{ steps.push.outputs.digest }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "pushed ${IMAGE}:${TAG} digest=${{ steps.push.outputs.digest }} commit=${GITHUB_SHA}"

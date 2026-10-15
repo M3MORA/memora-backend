@@ -1,0 +1,7 @@
+# /etc/sudoers.d/memora-deploy
+# visudo -c -f this file before installing.
+# Grants a single binary, not NOPASSWD: ALL.
+# The helper validates subcommands and image digests internally.
+
+Defaults:runner-memora-backend env_reset
+runner-memora-backend ALL=(root) NOPASSWD: /opt/memora/bin/memora-deploy

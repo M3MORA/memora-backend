@@ -1,0 +1,92 @@
+name: memora-infra
+
+networks:
+  memora-network:
+    name: memora-network
+    external: true
+
+volumes:
+  pgdata:
+    name: memora-infra_pgdata
+  redisdata:
+    name: memora-infra_redisdata
+
+services:
+  postgres:
+    image: ${POSTGRES_IMAGE:-postgres:17-alpine}
+    container_name: memora-postgres
+    restart: unless-stopped
+    stop_grace_period: 30s
+    env_file:
+      - ${MEMORA_SECRETS_DIR:-/opt/memora/secrets}/infra.env
+    environment:
+      POSTGRES_DB: memora
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      memora-network:
+        aliases:
+          - postgres
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U "$$POSTGRES_USER" -d memora']
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '5'
+    labels:
+      com.memora.stack: infra
+      com.memora.managed: 'true'
+    # No host ports: IAM reaches postgres via Docker DNS only.
+
+  redis:
+    image: ${REDIS_IMAGE:-redis:7-alpine}
+    container_name: memora-redis
+    restart: unless-stopped
+    stop_grace_period: 20s
+    env_file:
+      - ${MEMORA_SECRETS_DIR:-/opt/memora/secrets}/infra.env
+    command:
+      - redis-server
+      - --requirepass
+      - ${REDIS_PASSWORD}
+      - --appendonly
+      - 'yes'
+      - --maxmemory
+      - 256mb
+      - --maxmemory-policy
+      - noeviction
+    volumes:
+      - redisdata:/data
+    networks:
+      memora-network:
+        aliases:
+          - redis
+    healthcheck:
+      test: ['CMD-SHELL', 'redis-cli -a "$$REDIS_PASSWORD" ping | grep -q PONG']
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 384M
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '5'
+    labels:
+      com.memora.stack: infra
+      com.memora.managed: 'true'

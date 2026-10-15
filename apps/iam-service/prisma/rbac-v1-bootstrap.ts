@@ -218,7 +218,9 @@ export function assertSafeDevelopmentTarget(
   nodeEnv: string | undefined,
 ): { host: string; nodeEnv: string } {
   const envName = nodeEnv ?? 'development';
-  if (envName === 'production') {
+  const allowProduction =
+    process.env.MEMORA_RBAC_PRODUCTION_CONFIRM === RBAC_V1_MARKER_KEY;
+  if (envName === 'production' && !allowProduction) {
     throw new UnsafeBootstrapTargetError('NODE_ENV=production');
   }
   let host: string;
@@ -227,7 +229,11 @@ export function assertSafeDevelopmentTarget(
   } catch {
     throw new UnsafeBootstrapTargetError('IAM_DATABASE_URL is not a valid URL');
   }
-  if (!LOCAL_HOSTS.has(host)) {
+  const allowedHosts = new Set(LOCAL_HOSTS);
+  if (allowProduction) {
+    allowedHosts.add('postgres');
+  }
+  if (!allowedHosts.has(host)) {
     throw new UnsafeBootstrapTargetError(
       `database host ${host} is not a local development target`,
     );

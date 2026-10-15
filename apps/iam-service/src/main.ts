@@ -52,11 +52,16 @@ async function bootstrap() {
   await app.listen();
   app.get(PrismaService);
   app.get(RedisService);
-  startHealthHttpServer(
+  const healthServer = startHealthHttpServer(
     iam.IAM_HEALTH_HOST,
     iam.IAM_HEALTH_PORT,
     app.get(IamReadinessService),
   );
+  const closeHealthServer = () => {
+    healthServer.close();
+  };
+  process.once('SIGTERM', closeHealthServer);
+  process.once('SIGINT', closeHealthServer);
   Logger.log(
     `IAM PostgreSQL connected (database=${IAM_POSTGRES_DATABASE}, schema=${IAM_POSTGRES_SCHEMA})`,
     'Bootstrap',
@@ -73,11 +78,12 @@ function startHealthHttpServer(
   host: string,
   port: number,
   readiness: IamReadinessService,
-): void {
+): ReturnType<typeof createServer> {
   const server = createServer((request, response) => {
     void handleHealthRequest(request, response, readiness);
   });
   server.listen(port, host);
+  return server;
 }
 
 async function handleHealthRequest(
