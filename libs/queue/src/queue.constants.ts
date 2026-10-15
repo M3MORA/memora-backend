@@ -1,0 +1,10 @@
+export const QUEUE_REDIS_CONNECTION_OPTIONS = 'QUEUE_REDIS_CONNECTION_OPTIONS';
+export const QUEUE_BULLMQ_SHARED_OPTIONS = 'QUEUE_BULLMQ_SHARED_OPTIONS';
+
+export const DEFAULT_QUEUE_PREFIX = 'memora:bull';
+export const DEFAULT_QUEUE_ATTEMPTS = 3;
+export const DEFAULT_QUEUE_BACKOFF_MS = 1000;
+export const DEFAULT_WORKER_CONCURRENCY = 5;
+
+export const QUEUE_NAME_PATTERN = /^[a-z][a-z0-9-]{0,47}$/;
+export const JOB_NAME_PATTERN = /^[a-z][a-z0-9._-]{0,63}$/;

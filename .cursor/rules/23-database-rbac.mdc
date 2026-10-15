@@ -1,0 +1,15 @@
+---
+description: Prisma schemas/migrations/seed and IAM role-permission changes.
+globs: apps/**/prisma/**/*.prisma,apps/**/prisma/**/*.ts,apps/**/prisma/migrations/**,apps/**/prisma.config.ts,libs/contracts/src/iam/permissions.ts
+alwaysApply: false
+---
+# Database and RBAC data changes
+
+- Read actual Prisma 7 schema/config/migrations before planning a change. The latest MAIN FLOW Database Tracker expresses design **and approval statuses**; `To Review` is not approved DDL.
+- Distinguish data: schema changes => versioned Prisma migration; system-role/permission catalogs => explicit idempotent seed; user-specific grants => authorized admin workflow, not global seed.
+- Six MEMORA system roles: CUSTOMER, STORE_STAFF, MANAGER, JEWELER, DELIVERY_STAFF, ADMIN. Preserve existing IDs, inactive status and human-reviewed assignments; seed must not silently resurrect revoked roles/permissions.
+- Do not seed permissions or role_permissions from examples/proposed matrices; require an approved catalog and role-permission mapping. No hardcoded default ADMIN account.
+- Maintain guest `iam.customer_identities` ownership independently of login account. Never link accounts or identities automatically from matching emails.
+- Do not assume database-per-service or cross-domain FK policy is settled: current tracker records architecture tradeoffs. Align with approved, deployed topology; flag conflicts before altering ownership/FKs.
+- Never run `migrate reset`, destructive SQL, production seed or backfill without explicit authorization, backup/recovery plan and environment check. Run `prisma migrate deploy` only when explicitly asked/deployment procedure permits.
+- Use `prisma-migration-seed` skill for data/schema tasks.

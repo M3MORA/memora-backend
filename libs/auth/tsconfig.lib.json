@@ -1,0 +1,10 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "baseUrl": "../..",
+    "declaration": true,
+    "outDir": "../../dist/libs/auth"
+  },
+  "include": ["authorization/src/**/*", "google-oauth/src/**/*"],
+  "exclude": ["node_modules", "dist", "test", "**/*spec.ts"]
+}

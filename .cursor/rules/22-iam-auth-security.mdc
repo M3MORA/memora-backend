@@ -1,0 +1,15 @@
+---
+description: IAM authentication, Google OAuth, sessions and RBAC trust boundaries.
+globs: apps/api-gateway/src/modules/iam/**/*.ts,apps/iam-service/src/application/auth/**/*.ts,apps/iam-service/src/application/authorization/**/*.ts,libs/auth/**/*.ts
+alwaysApply: false
+---
+# MEMORA IAM / RBAC security invariants
+
+- IAM issues HS256 JWT, validates access tokens via gRPC, owns Argon2id and Redis refresh sessions; Gateway never receives JWT signing secret or maintains a second session store.
+- Guard flow: `JwtAuthGuard` -> `RolesGuard` -> `PermissionsGuard`. `@Public()` is explicit. Roles ANY, permissions ALL. No metadata means only RBAC guard skips, not authentication.
+- RBAC v1 catalog lives in `libs/contracts` (`PERMISSIONS` / `PERMISSION_DEFINITIONS`) with 45 codes and 48 explicit grants. Do not fabricate extra rights or elevate ADMIN implicitly. System role code is `ADMIN`, not `ADMINISTRATOR`. Role-permission bootstrap is a one-time apply command, not routine seed.
+- `CheckRoles`/`CheckPermissions` consult IAM-current grants, not stale JWT role/permission claims. Resource ownership/assignment must be checked by the owning service.
+- Refresh uses HttpOnly cookie, CSRF protection, Redis rotation/replay detection. Preserve grace/revocation behavior. Access JWT remains valid until expiry unless verified revocation design changes.
+- Google OAuth: Passport code flow + state/PKCE at Gateway, IAM independently verifies Google ID token; match by `google_sub`, not email. New identities get CUSTOMER only. No silent LOCAL/GOOGLE merge or arbitrary `google_sub` HTTP login.
+- IAM gRPC sensitive methods require verified `x-memora-internal-token` / configured service authentication; not a substitute for user-level authorization. Redact secrets/code/state/credentials from errors and logs.
+- For auth changes, load `auth-change-review` skill and preserve local login/refresh regression tests.

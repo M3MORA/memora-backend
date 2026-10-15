@@ -1,0 +1,139 @@
+syntax = "proto3";
+
+package memora.iam.v1;
+
+service IamService {
+  rpc Register (RegisterRequest) returns (AuthSessionResponse);
+  rpc Login (LoginRequest) returns (AuthSessionResponse);
+  rpc AuthenticateGoogle (AuthenticateGoogleRequest) returns (AuthSessionResponse);
+  rpc RefreshToken (RefreshTokenRequest) returns (AuthSessionResponse);
+  rpc Logout (LogoutRequest) returns (LogoutResponse);
+  rpc LogoutAll (LogoutAllRequest) returns (LogoutResponse);
+
+  rpc VerifyEmail (VerifyEmailRequest) returns (UserResponse);
+  rpc ResendVerificationEmail (ResendVerificationEmailRequest) returns (ResendVerificationEmailResponse);
+  rpc ForgotPassword (ForgotPasswordRequest) returns (ForgotPasswordResponse);
+  rpc ResetPassword (ResetPasswordRequest) returns (ResetPasswordResponse);
+
+  rpc GetCurrentUser (GetCurrentUserRequest) returns (UserResponse);
+  rpc GetUserById (GetUserByIdRequest) returns (UserResponse);
+
+  rpc ValidateAccessToken (ValidateAccessTokenRequest) returns (AccessPrincipalResponse);
+  rpc CheckRoles (CheckRolesRequest) returns (AuthorizationDecisionResponse);
+  rpc CheckPermissions (CheckPermissionsRequest) returns (AuthorizationDecisionResponse);
+}
+
+message RegisterRequest {
+  string full_name = 1;
+  string email = 2;
+  string password = 3;
+}
+
+message LoginRequest {
+  string email = 1;
+  string password = 2;
+}
+
+message AuthenticateGoogleRequest {
+  string id_token = 1;
+}
+
+message RefreshTokenRequest {
+  string refresh_credential = 1;
+}
+
+message LogoutRequest {
+  string refresh_credential = 1;
+}
+
+message LogoutAllRequest {
+  string access_credential = 1;
+}
+
+message LogoutResponse {}
+
+message VerifyEmailRequest {
+  string verification_credential = 1;
+}
+
+message ResendVerificationEmailRequest {
+  string access_credential = 1;
+}
+
+message ResendVerificationEmailResponse {
+  bool already_verified = 1;
+}
+
+message ForgotPasswordRequest {
+  string email = 1;
+}
+
+message ForgotPasswordResponse {
+  bool accepted = 1;
+}
+
+message ResetPasswordRequest {
+  string recovery_credential = 1;
+  string password = 2;
+}
+
+message ResetPasswordResponse {}
+
+message GetCurrentUserRequest {
+  string access_credential = 1;
+}
+
+message GetUserByIdRequest {
+  string user_id = 1;
+}
+
+message UserResponse {
+  PublicUser user = 1;
+}
+
+message ValidateAccessTokenRequest {
+  string access_credential = 1;
+}
+
+message AccessPrincipalResponse {
+  string user_id = 1;
+  string token_id = 2;
+  bool email_verified = 3;
+}
+
+message CheckRolesRequest {
+  string access_credential = 1;
+  repeated string role_codes = 2;
+}
+
+message CheckPermissionsRequest {
+  string access_credential = 1;
+  repeated string permission_codes = 2;
+}
+
+message AuthorizationDecisionResponse {
+  bool allowed = 1;
+  string user_id = 2;
+}
+
+message AuthSessionResponse {
+  PublicUser user = 1;
+  string access_credential = 2;
+  string refresh_credential = 3;
+  string token_type = 4;
+  int32 expires_in_seconds = 5;
+  int32 refresh_expires_in_seconds = 6;
+}
+
+message PublicUser {
+  string id = 1;
+  string email = 2;
+  string full_name = 3;
+  optional string phone = 4;
+  string auth_provider = 5;
+  string status = 6;
+  optional string email_verified_at = 7;
+  optional string last_login_at = 8;
+  string created_at = 9;
+  string updated_at = 10;
+}

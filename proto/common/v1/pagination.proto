@@ -1,0 +1,32 @@
+syntax = "proto3";
+
+package memora.common.v1;
+
+// Contract phân trang dùng chung giữa các gRPC service.
+// Không dùng generic message: mỗi RPC danh sách tự định nghĩa response riêng
+// và nhúng PaginationMeta, ví dụ:
+//
+//   message ListUsersRequest {
+//     memora.common.v1.PaginationRequest pagination = 1;
+//     string search = 2;
+//   }
+//
+//   message ListUsersResponse {
+//     repeated User data = 1;
+//     memora.common.v1.PaginationMeta pagination = 2;
+//   }
+//
+// HTTP query giữ flat ?page=&limit=. gRPC dùng nested pagination.
+// Quy ước: page >= 1, limit 1..100, total >= 0;
+// total_pages = ceil(total / limit); khi total = 0 thì total_pages = 0.
+message PaginationRequest {
+  int32 page = 1;
+  int32 limit = 2;
+}
+
+message PaginationMeta {
+  int32 page = 1;
+  int32 limit = 2;
+  int64 total = 3;
+  int32 total_pages = 4;
+}

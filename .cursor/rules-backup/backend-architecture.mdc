@@ -1,0 +1,76 @@
+---
+description: Mandatory MEMORA backend architecture and code-quality boundaries for all NestJS monorepo work. Use the companion memora-backend-architecture skill for detailed implementation workflows.
+alwaysApply: true
+---
+
+# MEMORA Backend — Mandatory Architecture Rules
+
+These rules apply to **all backend changes** in this repository. They set architectural boundaries; the companion `.cursor/skills/memora-backend-architecture/SKILL.md` provides detailed patterns and examples.
+
+## 1. Respect the real repository
+
+- Stack: **NestJS 11**, TypeScript strict mode, NestJS native monorepo, **npm**, API Gateway + gRPC business services.
+- Current known applications: `apps/api-gateway` and `apps/iam-service`. Catalog/Consultation applications were removed; **do not recreate missing services or prebuild future ones** unless explicitly requested.
+- Current known shared libs: `libs/common`, `libs/config`, `libs/contracts`, `libs/observability`. Current IAM proto: `proto/iam/v1/iam.proto`.
+- Before editing, inspect existing modules, bootstrap files, exports, proto, environment config, tests, `package.json`, `nest-cli.json` and relevant TypeScript aliases. **The repository is the source of truth**, not these snapshot details.
+- Make the smallest consistent change. Preserve existing public routes, responses, Swagger behavior and Gateway → IAM Ping unless a change is explicitly requested.
+
+## 2. Clear ownership and dependency boundaries
+
+- **Gateway** owns public HTTP REST/SSE/WebSocket entry points, public HTTP DTOs, Swagger, authentication entry checks and downstream clients. **No Prisma or direct domain table access in Gateway.**
+- **Business microservices** own business logic, repositories, data and inbound gRPC/event handlers. Organize them by bounded context, **not by transport type**.
+- `apps/<app>/src/config`: app-specific bootstrap, e.g. Gateway Swagger.
+- `libs/config`: common typed environment loading and per-service validation; `libs/common`: genuinely reusable transport-aware primitives; `libs/observability`: shared logging/tracing; `libs/contracts`: cross-process TypeScript contracts; `proto/`: gRPC wire-contract source of truth.
+- Do not create cross-service circular dependencies, global all-domain repositories, global HTTP DTO folders, or unused shared abstractions.
+
+## 3. Gateway features, DTOs and documentation
+
+- Organize Gateway under `apps/api-gateway/src/modules/<feature>/`.
+- When needed, use `controllers/` for REST, `sse/` for SSE controllers, `gateways/` for WebSocket gateways, `clients/` for downstream adapters, `dto/request/`, `dto/response/`, and `docs/` for Swagger decorators. **Do not create empty folders or handlers.**
+- Register REST and SSE controllers in `@Module.controllers`; register WebSocket gateways in `@Module.providers`.
+- Define public HTTP Request/Response **DTO classes** per feature. Use `class-validator`, Swagger property decorators and explicit mapping to RPC messages. Never return raw Prisma records with secrets or sensitive internal fields.
+- Keep Swagger bootstrap in `apps/api-gateway/src/config/swagger.config.ts` only, and grouped endpoint decorators in `modules/<feature>/docs/` when useful. Do not move Swagger into `libs/config` or add Swagger to gRPC-only services.
+- Preserve `GET /api/v1/iam/ping`, `/api/docs`, `/api/docs-json` and versioned `/api/v1` HTTP routes unless requested otherwise. Swagger Bearer configuration does not automatically protect every route.
+
+## 4. Transport rules: gRPC, REST streaming, WebSocket and RabbitMQ
+
+- gRPC method names, `package`, `service`, request/response field types and identifiers must match `.proto`. Never silently reuse or renumber protobuf fields.
+- Use shared types from `libs/contracts`; the current IAM contract is **handwritten**, not generated. Maintain consistency with `.proto`; adopt `ts-proto` only when approved. Unary RxJS responses can use `firstValueFrom()` plus timeout; **do not collapse streaming RPCs into unary promises**.
+- SSE is server → client over HTTP (`@Sse()` generally for GET). If a streaming chatbot requires POST, consider HTTP response streaming via `fetch`. Preserve authorization, cancellation and backpressure concerns.
+- WebSocket gateways belong to the owning feature. Implement handshake/session authentication, per-event authorization and validation; do not assume Swagger documents Socket.IO events.
+- A service may accept **multiple inbound transports**. Add `connectMicroservice(Transport.RMQ)` only when that process **consumes** RabbitMQ. **Publisher-only services use a client/publisher module, not an extra consumer transport in `main.ts`.**
+- Transport controllers (`*.grpc.controller.ts`, `*.rmq.controller.ts`) delegate to application services; external REST calls (e.g. Python LightRAG) use injected HTTP adapters and do not require an HTTP listener.
+- RabbitMQ consumers need explicit acknowledgement policy, retry/backoff, DLQ, idempotency and bounded concurrency. Do not acknowledge before required processing succeeds.
+
+## 5. Prisma and PostgreSQL ownership
+
+- Each **data-owning service** maintains its own Prisma schema, migrations, generated client, Prisma service and repositories. **Never create a single global Prisma Client with all tables.**
+- One PostgreSQL instance/database with isolated schemas/roles is acceptable initially; enforce per-service privileges. One PrismaClient and bounded connection pool **per process**, not per request; account for replica multiplication and shutdown.
+- Never access another service's tables directly, even within the same PostgreSQL database. Use gRPC for authoritative reads and events/read models for asynchronous sync. References across service boundaries are logical IDs rather than cross-service foreign keys.
+- Cross-service workflows are not shared DB transactions. Use transactional outbox, at-least-once-safe consumers and compensating flows where needed.
+- Follow the repository's Prisma 7 adapter/config pattern; do not paste obsolete Prisma 5/6 bootstrapping.
+
+## 6. ENV, security and observability
+
+- Validate only the ENV variables required by the **running process**. Fail fast for missing or invalid required values. Prefer typed `ConfigService`/namespaced config; keep `process.env` concentrated in config/bootstrap.
+- Never hardcode deployment endpoints, secrets or credentials. `.env` must be untracked; `.env.example` contains only placeholders. Inject production secrets at runtime.
+- `0.0.0.0` is a **bind address**, not the hostname a client should dial. Use `localhost` in local development and internal DNS in containers.
+- The Gateway validates external identities. Domain services enforce sensitive authorization and trust only authenticated/verified internal metadata or tokens—not arbitrary client-supplied `userId`.
+- Use transport-specific HTTP/gRPC/WebSocket error handling; do not reuse HTTP filters indiscriminately. Correlation/trace IDs should propagate through RPC and async events. Redact secrets and sensitive personal data from logs.
+
+## 7. Notifications and background work
+
+- A dedicated Notification Microservice is **not mandatory**. When Platform Service is actually introduced, prefer `platform-service/src/modules/notifications/` for notification records, preferences and channel dispatch.
+- Distinguish in-app notifications (stored + REST/SSE), web/mobile push (FCM/APNs as applicable), and email (provider adapter).
+- An initial `workers/notification.worker.ts` can be an injectable provider **inside Platform Service's process**. Create an independent worker process only when scaling, isolation or operational requirements justify it.
+- Domain services emit durable events; notification sending must not block successful payments/orders. Implement idempotency, bounded retry, dead-letter handling and per-channel delivery status.
+
+## 8. Engineering workflow (required for every change)
+
+1. Inspect the relevant existing source and decide the **owning feature/service**, inbound/outbound protocol, contract, data owner and security boundary.
+2. Implement only requested behavior; **ask before adding a microservice, breaking an RPC/API, migrating database ownership, or introducing a new broker/toolchain**.
+3. Preserve strict TypeScript and ESLint checks. Do not silence errors using `any`, `@ts-ignore`, broad `eslint-disable` or unsafe assertions. Update/replace obsolete scaffold tests when their area is touched.
+4. Verify relevant build, lint, tests and runtime behavior as feasible. **Do not claim validation passed unless commands actually ran.** Report what was not tested.
+5. Reply in **concise Vietnamese**, listing exact modified files, architectural decisions, verification evidence and remaining issues. For small edits, provide complete changed file contents or concise diffs when asked.
+
+**When in doubt: choose the simplest design that preserves ownership, transport boundaries and backwards compatibility.**

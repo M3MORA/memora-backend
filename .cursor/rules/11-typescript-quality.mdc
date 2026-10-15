@@ -1,0 +1,12 @@
+---
+description: Strict TypeScript and test discipline for NestJS applications/libraries.
+globs: apps/**/*.ts,libs/**/*.ts
+alwaysApply: false
+---
+# TypeScript quality
+
+- Respect repo tsconfig, ESLint and NestJS DI patterns. Avoid `any`, `@ts-ignore`, `@ts-nocheck`, broad `eslint-disable` and unjustified casts.
+- Use `unknown` + narrowing for external errors/input, `import type` for types, and reuse existing exported interfaces and helpers.
+- Fix root causes (missing export, aliases, interface shape, circular dependency) rather than suppressing dependent errors. An IDE-only error is not proof the CLI build fails.
+- Do not create barrel files, wrappers, interfaces or folders solely for aesthetics. Keep tests adjacent to their subject where the repo already does.
+- Focus checks on touched packages first; widen to downstream consumers if shared contracts/providers changed. Report exact commands and outcomes.

@@ -1,0 +1,31 @@
+---
+description: Gateway module ownership and placement. Apply to API Gateway feature or module changes.
+globs: apps/api-gateway/src/modules/**/*.ts,apps/api-gateway/src/app.module.ts
+alwaysApply: false
+---
+
+# Gateway: Domain -> Feature -> Layer
+
+- Use `modules/<domain>/<feature>/{controllers,dto,docs,mappers,...}` only for files actually required. Keep domain-wide `clients/` and `<domain>.module.ts` as composition root; no domain-level dump of unrelated DTOs/controllers.
+- Do **not** scaffold future features or split into Nest feature modules without real DI/lifecycle needs. Never duplicate a domain gRPC client/provider.
+- HTTP controller: validate DTO, annotate Swagger/authorization, map to RPC, return public response. No Prisma, Redis session implementation, IAM token signing or domain transaction logic.
+- `@Public()` must be intentional; absence of RBAC metadata does not make a route public. Preserve guard order `JwtAuthGuard -> RolesGuard -> PermissionsGuard` and public exemptions.
+- For sensitive business actions, Gateway RBAC is coarse; the owning service enforces ownership, assignment and state transitions.
+- Read `docs/architecture/api-gateway-structure.md` if present; otherwise consult `docs/ai/context-map.md`. Existing feature shape takes precedence over examples.
+
+## Feature Transport Organization
+
+Follow Domain → Feature → Layer by default.
+
+- If a feature uses only one transport (HTTP REST,
+  SSE, or WebSocket), do not create a transport folder.
+- If a feature uses two or more transports, group
+  transport-specific files under http/, sse/,
+  and/or websocket/.
+- Create only transport folders actually required.
+- Keep transport-independent logic at feature level.
+- Do not duplicate business logic between transports.
+- Keep shared domain gRPC clients in domain/clients/.
+- Do not refactor existing features solely to enforce
+  this convention.
+- Preserve existing routes, contracts and DI wiring.

@@ -1,0 +1,13 @@
+---
+description: Runtime ENV, Docker, security and deploy configuration for MEMORA.
+globs: apps/**/src/main.ts,libs/config/**/*.ts,**/Dockerfile*,docker-compose*.yml,docker-compose*.yaml,**/k8s/**/*.yaml,**/k8s/**/*.yml,.env.example
+alwaysApply: false
+---
+# Operations / infrastructure
+
+- Read current ENV validation and existing deployment layout before changes. Each process validates only variables it needs; do not make optional Google OAuth credentials mandatory when feature disabled.
+- `0.0.0.0` is a bind address, not a gRPC target; use localhost for local host and internal DNS for containers.
+- Never commit or print `.env`, OAuth client secret, IAM JWT secret, `IAM_INTERNAL_GRPC_SECRET`, Redis tokens or private keys; `.env.example` contains placeholders only.
+- Production gRPC is private and should use authenticated encrypted transport appropriate to the environment; internal shared token alone is not network encryption.
+- Preserve controlled bootstrap: migration -> approved seed -> service start. No seed in Nest `onModuleInit`, no duplicate concurrent bootstrap jobs.
+- Do not deploy, mutate external infrastructure, or modify network/security settings without explicit instruction. Report health/observability limitations honestly.

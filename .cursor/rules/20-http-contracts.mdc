@@ -1,0 +1,13 @@
+---
+description: HTTP DTO, response envelope, Swagger and error mapping for Gateway endpoints.
+globs: apps/api-gateway/src/modules/**/controllers/**/*.ts,apps/api-gateway/src/modules/**/dto/**/*.ts,apps/api-gateway/src/modules/**/docs/**/*.ts,apps/api-gateway/src/modules/**/mappers/**/*.ts
+alwaysApply: false
+---
+# HTTP contract
+
+- HTTP DTOs are feature-local **classes** with `class-validator` and Swagger decorators; never use raw protobuf interfaces as HTTP body DTOs. Validate at the public boundary; map to the existing RPC contract explicitly.
+- Existing Gateway `ResponseTransformInterceptor` owns success envelope: `{ statusCode, message, data, meta? }`. Do not double-wrap. The current HTTP exception filter owns error envelope; map gRPC failures to HTTP in the Gateway client, not in a controller catch-all.
+- Preserve special handling for redirects/streaming/204 and existing `@SkipResponseTransform()` behavior. Do not guess pagination from arbitrary payloads.
+- Public response shapes must not expose hashes, Google identifiers, internal tokens, PII beyond approved scope, or Prisma internals.
+- Do not add `@Public()` to fix 401 without checking whether the endpoint truly needs anonymous access.
+- When adding an HTTP API, load skill `implement-http-api`; do not modify `.proto` if the needed RPC already exists.

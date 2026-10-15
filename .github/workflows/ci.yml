@@ -1,0 +1,139 @@
+name: CI
+
+on:
+  pull_request:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - master
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_ENV: test
+  CI: true
+  REDIS_PASSWORD: ci-redis-pass-ok16
+  IAM_REDIS_HOST: 127.0.0.1
+  IAM_REDIS_PORT: '6379'
+  IAM_REDIS_PASSWORD: ci-redis-pass-ok16
+  IAM_REDIS_DB: '0'
+  CACHE_REDIS_HOST: 127.0.0.1
+  CACHE_REDIS_PORT: '6379'
+  CACHE_REDIS_PASSWORD: ci-redis-pass-ok16
+  CACHE_REDIS_DB: '1'
+  QUEUE_REDIS_HOST: 127.0.0.1
+  QUEUE_REDIS_PORT: '6379'
+  QUEUE_REDIS_PASSWORD: ci-redis-pass-ok16
+  QUEUE_REDIS_DB: '2'
+  IAM_DATABASE_URL: postgresql://memora_ci:memora_ci_pg@127.0.0.1:5432/memora_ci?schema=iam
+
+jobs:
+  quality:
+    name: Quality gates
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: memora_ci
+          POSTGRES_PASSWORD: memora_ci_pg
+          POSTGRES_DB: memora_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U memora_ci -d memora_ci"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Start CI Redis
+        run: |
+          docker run -d --name memora-ci-redis -p 6379:6379 redis:7-alpine \
+            redis-server --requirepass "$REDIS_PASSWORD" --appendonly no --maxmemory-policy noeviction
+          for i in $(seq 1 20); do
+            if docker exec memora-ci-redis redis-cli -a "$REDIS_PASSWORD" ping | grep -q PONG; then
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "CI Redis did not become ready" >&2
+          exit 1
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Engineering kit
+        run: |
+          npm run kit:validate
+          npm run boundaries
+
+      - name: Load gRPC protos
+        run: npm run proto:check
+
+      - name: Prisma validate and generate
+        run: |
+          npm run prisma:iam:validate
+          npm run prisma:iam:generate
+
+      - name: Prisma migrate deploy (CI database only)
+        run: npm run prisma:iam:migrate:deploy
+
+      - name: Lint
+        run: npm run lint:check
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build applications
+        run: |
+          npx nest build api-gateway
+          npm run build:iam
+
+      - name: Unit and IAM refresh regression tests
+        run: npx jest --runInBand --testPathIgnorePatterns=live.spec.ts
+
+      - name: Redis integration tests
+        env:
+          MEMORA_REDIS_TEST: '1'
+        run: npx jest --runInBand --testPathPatterns=live.spec.ts
+
+  security:
+    name: Security
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Reject tracked secrets
+        run: npm run ci:secrets
+
+      - name: Production dependency audit
+        run: npm run ci:audit
